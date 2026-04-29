@@ -1,2 +1,0 @@
-Новая информация
-Test connection
