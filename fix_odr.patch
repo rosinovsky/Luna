@@ -1,0 +1,242 @@
+diff --git a/core/include/internal.h b/core/include/internal.h
+new file mode 100644
+index 0000000..1234567
+--- /dev/null
++++ b/core/include/internal.h
+@@ -0,0 +1,35 @@
++#ifndef CLINKER_INTERNAL_H
++#define CLINKER_INTERNAL_H
++
++#include "clinker_forecast.h"
++#include <vector>
++#include <string>
++
++struct Tensor {
++    std::vector<int> shape;
++    std::vector<float> data;
++    std::string name;
++    float* ptr() { return data.data(); }
++    const float* ptr() const { return data.data(); }
++};
++
++struct ModelConfig {
++    int d_model = 64;
++    int n_heads = 4;
++    int n_layers = 2;
++    int history_len = 288;
++    int n_features = 15;
++    int n_zones = 4;
++    int n_flows = 3;
++    int n_chemistry = 5;
++    int n_outputs = 4;
++    int n_quantiles = 3;
++    float quantiles[CF_MAX_QUANTILES] = {0.05f, 0.50f, 0.95f};
++    char version[32] = "1.0.0-synthetic";
++    char created_at[32] = "2026-05-04";
++};
++
++struct CF_Model {
++    ModelConfig config;
++    std::vector<Tensor> weights;
++    std::vector<std::string> weight_names;
++    size_t total_params = 0;
++    std::vector<float> workspace;
++    size_t workspace_size = 0;
++};
++
++#endif
++
+diff --git a/core/src/model.cpp b/core/src/model.cpp
+index abcdef1..1234567 100644
+--- a/core/src/model.cpp
++++ b/core/src/model.cpp
+@@ -1,4 +1,5 @@
+ #include "clinker_forecast.h"
++#include "internal.h"
+ #include <cstdio>
+ #include <cstdlib>
+ #include <cstring>
+@@ -7,41 +8,6 @@
+ #include <vector>
+ #include <string>
+
+-// ============ ВНУТРЕННИЕ СТРУКТУРЫ ============
+-
+-struct Tensor {
+-    std::vector<int> shape;
+-    std::vector<float> data;
+-    std::string name;
+-    
+-    float* ptr() { return data.data(); }
+-    const float* ptr() const { return data.data(); }
+-    size_t size() const { return data.size(); }
+-};
+-
+-struct ModelConfig {
+-    int d_model = 64;
+-    int n_heads = 4;
+-    int n_layers = 2;
+-    int history_len = 288;
+-    int n_features = 15;
+-    int n_zones = 4;
+-    int n_flows = 3;
+-    int n_chemistry = 5;
+-    int n_outputs = 4;
+-    int n_quantiles = 3;
+-    float quantiles[CF_MAX_QUANTILES] = {0.05f, 0.50f, 0.95f};
+-    char version[32] = "1.0.0-synthetic";
+-    char created_at[32] = "2026-05-04";
+-};
+-
+-struct CF_Model {
+-    ModelConfig config;
+-    std::vector<Tensor> weights;
+-    std::vector<std::string> weight_names;
+-    size_t total_params = 0;
+-    
+-    // Кэш для инференса
+-    std::vector<float> workspace;
+-    size_t workspace_size = 0;
+-};
+-
+ // ============ ЗАГРУЗКА ВЕСОВ ============
+
+ static CF_Status load_weights_from_file(CF_Model* model, const char* path) {
+@@ -149,7 +115,7 @@
+     info.n_outputs = model->config.n_outputs;
+     info.n_quantiles = model->config.n_quantiles;
+     memcpy(info.quantiles, model->config.quantiles, sizeof(info.quantiles));
+-    info.total_params = model->total_params;
++    info.total_params = static_cast<int64_t>(model->total_params);
+     info.model_size_bytes = model->total_params * sizeof(float);
+
+     return info;
+@@ -157,5 +123,5 @@
+
+ const char* cf_version(void) {
+     return "ClinkerForecast Core v1.0.0-synthetic";
+ }
+
+-#endif /* CLINKER_FORECAST_H */
++// end of model.cpp
+\ No newline at end of file
+
+diff --git a/core/src/inference.cpp b/core/src/inference.cpp
+index abcdef2..1234568 100644
+--- a/core/src/inference.cpp
++++ b/core/src/inference.cpp
+@@ -1,4 +1,5 @@
+ #include "clinker_forecast.h"
++#include "internal.h"
+ #include "ops.h"
+ #include <vector>
+ #include <cmath>
+@@ -7,28 +8,6 @@
+ #include <string>
+ #include <cstdio>
+
+-// External model struct
+-struct Tensor {
+-    std::vector<int> shape;
+-    std::vector<float> data;
+-    std::string name;
+-    float* ptr() { return data.data(); }
+-    const float* ptr() const { return data.data(); }
+-};
+-
+-struct ModelConfig {
+-    int d_model, n_heads, n_layers, history_len, n_features;
+-    int n_zones, n_flows, n_chemistry, n_outputs, n_quantiles;
+-};
+-
+-struct CF_Model {
+-    ModelConfig config;
+-    std::vector<Tensor> weights;
+-    std::vector<std::string> weight_names;
+-};
+-
+-// External ops
+-extern void matmul(const float* A, const float* B, float* C, int M, int K, int N, bool transpose_A);
+-extern void matmul_bt(const float* A, const float* B, float* C, int M, int K, int N);
+-extern void linear(const float* X, const float* W, const float* b, float* Y, int batch, int in_features, int out_features);
+-extern void layer_norm(float* x, const float* gamma, const float* beta, int batch, int features, float eps);
+-extern void softmax(float* x, int batch, int features);
+-extern void lstm_step(const float* x, const float* h_prev, const float* c_prev,
+-                      const float* W_ih, const float* W_hh,
+-                      const float* b_ih, const float* b_hh,
+-                      float* h_out, float* c_out, int input_size, int hidden_size);
+-extern void multi_head_attention(const float* X, int batch, int seq_len, int d_model,
+-                                 const float* W_q, const float* W_k, const float* W_v, const float* W_o,
+-                                 const float* b_q, const float* b_k, const float* b_v, const float* b_o,
+-                                 int n_heads, float* output, float* attn_weights_out);
+-extern void ffn(const float* X, const float* W1, const float* b1,
+-                const float* W2, const float* b2,
+-                float* output, int batch_seq, int d_model);
+-
+ // ============ FEATURE ENGINEERING ============
+
+ static void extract_features(const CF_TechnologyParams* tech,
+@@ -104,7 +83,7 @@
+
+ // ============ FORWARD PASS ============
+
+-static void forward(CF_Model* model, const float* features, int batch_size,
++void forward(CF_Model* model, const float* features, int batch_size,
+                     float* output_quantiles, float* output_trend,
+                     float* feature_importance, float* attention_weights) {
+     const ModelConfig& cfg = model->config;
+@@ -303,7 +282,7 @@
+
+ // ============ PHYSICS VALIDATION ============
+
+-static bool validate_clinker_physics(const float* c3s, const float* c2s,
++bool validate_clinker_physics(const float* c3s, const float* c2s,
+                                       const float* c3a, const float* c4af,
+                                       const float* free_cao, char* error, size_t err_len) {
+     float total = c3s[1] + c2s[1] + c3a[1] + c4af[1];
+@@ -381,4 +360,4 @@
+         delete[] result->predictions;
+         delete result;
+     }
+ }
+-
++// end of inference.cpp
+\ No newline at end of file
+
+diff --git a/core/src/export.cpp b/core/src/export.cpp
+index abcdef3..1234569 100644
+--- a/core/src/export.cpp
++++ b/core/src/export.cpp
+@@ -1,4 +1,5 @@
+ #include "clinker_forecast.h"
++#include "internal.h"
+ #include <cstdio>
+ #include <cstring>
+ #include <cstdlib>
+@@ -157,4 +158,4 @@
+
+ void cf_free_buffer(uint8_t* buf) {
+     delete[] buf;
+ }
+-
++// end of export.cpp
+\ No newline at end of file
+
+diff --git a/core/src/physics.cpp b/core/src/physics.cpp
+index abcdef4..1234570 100644
+--- a/core/src/physics.cpp
++++ b/core/src/physics.cpp
+@@ -1,4 +1,5 @@
+ #include "clinker_forecast.h"
++#include "internal.h"
+ #include <cmath>
+ #include <cstring>
+ #include <cstdio>
+@@ -168,4 +169,4 @@
+
+     *out_n_features = idx;
+     return CF_OK;
+ }
+-
++// end of physics.cpp
+\ No newline at end of file

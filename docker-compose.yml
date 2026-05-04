@@ -1,0 +1,47 @@
+version: "3.8"
+
+services:
+  clinker-forecast:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: clinker-forecast:latest
+    container_name: clinker-forecast
+
+    # Монтируем модель и конфиг
+    volumes:
+      - ./models:/opt/clinker/models:ro
+      - ./config:/opt/clinker/config:ro
+
+    # Порты (для будущего REST API)
+    ports:
+      - "8080:8080"
+
+    # Ограничения ресурсов
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 128M
+
+    # Перезапуск при падении
+    restart: unless-stopped
+
+    # Логирование
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Опционально: Prometheus метрики
+  # prometheus:
+  #   image: prom/prometheus:latest
+  #   volumes:
+  #     - ./prometheus.yml:/etc/prometheus/prometheus.yml
+  #   ports:
+  #     - "9090:9090"

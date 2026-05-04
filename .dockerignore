@@ -1,0 +1,30 @@
+# Git
+.git
+.gitignore
+
+# Build artifacts (пересобираем внутри контейнера)
+build/
+*.o
+*.so
+*.a
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Debug
+debug_test.c
+*.log

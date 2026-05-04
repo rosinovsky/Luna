@@ -1,0 +1,74 @@
+namespace ClinkerForecast;
+
+// Тензор: многомерный массив весов
+table Tensor {
+  shape:[int];        // Размерности [d1, d2, d3, ...]
+  data:[float];       // Flattened данные (row-major)
+  name:string;        // Имя тензора для отладки
+}
+
+// Гиперпараметры модели
+table ModelConfig {
+  d_model:int;        // Размерность эмбеддинга (default: 64)
+  n_heads:int;        // Число голов attention (default: 4)
+  n_layers:int;       // Число слоев Transformer (default: 2)
+  history_len:int;    // Длина истории в таймстепах (default: 288 = 72h * 4)
+  n_features:int;     // Число входных фичей (default: 15)
+  n_zones:int;        // Число температурных зон (default: 4)
+  n_flows:int;        // Число потоков (default: 3)
+  n_chemistry:int;    // Число хим. элементов (default: 5)
+  quantiles:[float];  // Квантили для прогноза [0.05, 0.5, 0.95]
+  version:string;     // Версия модели
+  created_at:string;  // Дата создания
+}
+
+// Архитектура модели
+table ModelWeights {
+  config:ModelConfig;
+
+  // Embedding слой
+  embed_technology:Tensor;   // [n_zones + n_flows + 1, d_model]
+  embed_chemistry:Tensor;    // [n_chemistry, d_model]
+  embed_temporal:Tensor;     // [history_len, d_model]
+
+  // LSTM encoder
+  lstm_w_ih:Tensor;          // [4*d_model, d_model]
+  lstm_w_hh:Tensor;          // [4*d_model, d_model]
+  lstm_b_ih:Tensor;          // [4*d_model]
+  lstm_b_hh:Tensor;          // [4*d_model]
+
+  // Multi-head attention
+  attn_wq:[Tensor];          // [n_layers, d_model, d_model]
+  attn_wk:[Tensor];          // [n_layers, d_model, d_model]
+  attn_wv:[Tensor];          // [n_layers, d_model, d_model]
+  attn_wo:[Tensor];          // [n_layers, d_model, d_model]
+  attn_bq:[Tensor];          // [n_layers, d_model]
+  attn_bk:[Tensor];          // [n_layers, d_model]
+  attn_bv:[Tensor];          // [n_layers, d_model]
+  attn_bo:[Tensor];          // [n_layers, d_model]
+
+  // FFN
+  ffn_w1:[Tensor];           // [n_layers, d_model, 4*d_model]
+  ffn_w2:[Tensor];           // [n_layers, 4*d_model, d_model]
+  ffn_b1:[Tensor];           // [n_layers, 4*d_model]
+  ffn_b2:[Tensor];           // [n_layers, d_model]
+
+  // LayerNorm
+  ln_gamma:[Tensor];         // [n_layers + 1, d_model]
+  ln_beta:[Tensor];          // [n_layers + 1, d_model]
+
+  // Quantile regression heads
+  head_wq:[Tensor];          // [n_quantiles, d_model, d_model]
+  head_wq_bias:[Tensor];     // [n_quantiles, d_model]
+  head_wout:[Tensor];        // [n_quantiles, d_model, n_outputs]
+  head_bout:[Tensor];        // [n_quantiles, n_outputs]
+
+  // Trend classification head
+  trend_w:Tensor;            // [d_model, 3]
+  trend_b:Tensor;           // [3]
+
+  // Explainability: projection для feature importance
+  explain_w:Tensor;          // [d_model, n_features]
+}
+
+root_type ModelWeights;
